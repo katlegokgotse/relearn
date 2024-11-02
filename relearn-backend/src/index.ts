@@ -83,7 +83,7 @@ app.post('/transcripts/send', authenticateUser, async (req: any, res: any) => {
   const predictedMarks = await predictMarks(modules, marks);
 
   // Chart configuration
-  const data = [
+  const data: any[] = [
     {
       x: modules,
       y: marks,
@@ -99,13 +99,13 @@ app.post('/transcripts/send', authenticateUser, async (req: any, res: any) => {
       marker: { color: `rgba(255, 99, 132, 0.7)`}
     },
   ];
-  const layout  = {
+  const layout: any  = {
     title: 'Transcript Analysis with Predicted Marks',
     xaxis: {title: 'Modules'},
     yaxis: {title: 'Marks', range: [0, 100]},
     barmode: 'group'
   }
-  const imgOpts = { format: 'png', width: 800, height: 400 };
+  const imgOpts: any = { format: 'png', width: 800, height: 400 };
  Plot.newPlot('chart', data, layout, imgOpts).then((image: any)=> {
   res.set('Content-Type', 'image/png');
   res.send(image)
