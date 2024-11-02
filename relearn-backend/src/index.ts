@@ -5,7 +5,7 @@ import { PrismaClient } from "@prisma/client";
 import jwt from 'jsonwebtoken'
 import bodyParser from "body-parser";
 import { predictMarks } from "./utils/predict";
-import Plot from 'plotly.js';
+//import Plot from 'plotly.js';
 dotenv.config();
 
 const prisma = new PrismaClient();
@@ -106,12 +106,13 @@ app.post('/transcripts/send', authenticateUser, async (req: any, res: any) => {
     barmode: 'group'
   }
   const imgOpts: any = { format: 'png', width: 800, height: 400 };
- Plot.newPlot('chart', data, layout, imgOpts).then((image: any)=> {
+ /*Plot.newPlot('chart', data, layout, imgOpts).then((image: any)=> {
   res.set('Content-Type', 'image/png');
   res.send(image)
  }).catch ((error: any) => {
       res.status(500).json({ error: "Failed to generate transcript chart." });
   })
+      */
 });
 app.post('/transcripts/process', authenticateUser, ({req, res}: any) => {
 
