@@ -3,13 +3,17 @@ import dotenv from "dotenv";
 import bcrypt from 'bcrypt'
 import { PrismaClient } from "@prisma/client";
 import jwt from 'jsonwebtoken'
+import bodyParser from "body-parser";
+import { predictMarks } from "./utils/predict";
 
 dotenv.config();
 
 const prisma = new PrismaClient();
 const app: Express = express();
 const port = process.env.PORT;
+app.use(bodyParser.json());
 
+/** Middleware */
 const authenticateUser = (req: express.Request, res: express.Response, next: express.NextFunction): void => { 
   const token = req.cookies?.token;
   if (!token) {
@@ -29,10 +33,10 @@ const authenticateUser = (req: express.Request, res: express.Response, next: exp
   }
 };
 
-app.post('/auth/login', async(req: any, res: any) =>{
+app.post('/auth/login', authenticateUser, async(req: any, res: any) =>{
   const { email, password } = req.body;
     try {
-      const user = await prisma.user.findUnique({where: { email }});
+      const user = await prisma.user.findUnique({where: { emailAddress: email  }});
 
       if (!user) {
         return res.status(404).json({ message: "User not found" });
@@ -56,11 +60,11 @@ app.post('/auth/login', async(req: any, res: any) =>{
 });
 
 app.post('/auth/registration', async({req, res}: any) => {
-  const { name, username, email, password } = req.body;
+  const {  username, email, password } = req.body;
   const hashedPassword = await bcrypt.hash(password, 15)
   try{
     const user = await prisma.user.create({
-      data: {name, username, email, password: hashedPassword}, 
+      data: { username, emailAddress: email, password: hashedPassword}, 
     });
     res.status(201).json({message: "Registration Successful", user});
   } catch( error: any){
@@ -68,11 +72,36 @@ app.post('/auth/registration', async({req, res}: any) => {
   }
 });
 
-app.post('/transcripts/send', ({req, res}: any)=>{
+app.post('/transcripts/send', authenticateUser, async (req: any, res: any) => {
+  const { modules, marks } = req.body;
+  // Validate input
+  if (!Array.isArray(modules) || !Array.isArray(marks) || modules.length !== marks.length) {
+      return res.status(400).json({ error: "Modules and marks arrays are required and must be the same length." });
+  }
 
+  // Generate predicted marks (e.g., increase for illustration purposes)
+  const predictedMarks = await predictMarks(modules, marks);
+
+  // Chart configuration
+  const data = [
+    {
+      x: modules,
+      y: marks,
+      type: 'bar',
+      
+    }
+  ]
+
+  // Render the chart and send as response
+  try {
+      const imageBuffer = await chartJSNodeCanvas.renderToBuffer(configuration, 'image/png');
+      res.set('Content-Type', 'image/png');
+      res.send(imageBuffer);
+  } catch (error) {
+      res.status(500).json({ error: "Failed to generate transcript chart." });
+  }
 });
-
-app.post('/transcripts/read', ({req, res}: any) => {
+app.post('/transcripts/process', authenticateUser, ({req, res}: any) => {
 
 });
 
