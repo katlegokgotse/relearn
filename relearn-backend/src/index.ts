@@ -1,14 +1,13 @@
 import express, { Express, Request, Response } from "express";
 import dotenv from "dotenv";
-import bcrypt from 'bcrypt'
-import { PrismaClient } from "@prisma/client";
-import jwt from 'jsonwebtoken'
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 import bodyParser from "body-parser";
 import { predictMarks } from "./utils/predict";
-//import Plot from 'plotly.js';
+import { PrismaClient } from "@prisma/client";
 dotenv.config();
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient;
 const app: Express = express();
 const port = process.env.PORT;
 app.use(bodyParser.json());
@@ -59,8 +58,11 @@ app.post('/auth/login', authenticateUser, async(req: any, res: any) =>{
     }
 });
 
-app.post('/auth/registration', async({req, res}: any) => {
+app.post('/auth/registration', async(req: any, res: any) => {
   const {  username, email, password } = req.body;
+  console.log(username)
+  console.log(email)
+  console.log(password)
   const hashedPassword = await bcrypt.hash(password, 15)
   try{
     const user = await prisma.user.create({
@@ -68,53 +70,34 @@ app.post('/auth/registration', async({req, res}: any) => {
     });
     res.status(201).json({message: "Registration Successful", user});
   } catch( error: any){
+    console.error("Error creating user:", error);
     res.status(500).json({ message: 'Registration failed', error: error.message || "Server Error" });
   }
 });
 
-app.post('/transcripts/send', authenticateUser, async (req: any, res: any) => {
-  const { modules, marks } = req.body;
+app.post('/transcripts/send', async (req: any, res: any) => {
+  const { modules, marks, semestersPassed, numOfSemesters } = req.body;
+  
   // Validate input
   if (!Array.isArray(modules) || !Array.isArray(marks) || modules.length !== marks.length) {
-      return res.status(400).json({ error: "Modules and marks arrays are required and must be the same length." });
+    return res.status(400).json({ error: "Modules and marks arrays are required and must be the same length." });
   }
 
   // Generate predicted marks (e.g., increase for illustration purposes)
-  const predictedMarks = await predictMarks(modules, marks);
+  const predictedMarks = await predictMarks(modules, marks, semestersPassed, numOfSemesters);
 
-  // Chart configuration
-  const data: any[] = [
-    {
-      x: modules,
-      y: marks,
-      type: 'bar',
-      name: 'Previous Marks',
-      marker: { color: `rgba(54, 162, 235, 0.7)`}
-    },
-    {
-      x: modules,
-      y: marks,
-      type: 'bar',
-      name: 'Predicted Marks',
-      marker: { color: `rgba(255, 99, 132, 0.7)`}
-    },
-  ];
-  const layout: any  = {
-    title: 'Transcript Analysis with Predicted Marks',
-    xaxis: {title: 'Modules'},
-    yaxis: {title: 'Marks', range: [0, 100]},
-    barmode: 'group'
-  }
-  const imgOpts: any = { format: 'png', width: 800, height: 400 };
- /*Plot.newPlot('chart', data, layout, imgOpts).then((image: any)=> {
-  res.set('Content-Type', 'image/png');
-  res.send(image)
- }).catch ((error: any) => {
-      res.status(500).json({ error: "Failed to generate transcript chart." });
-  })
-      */
+  // Prepare the response data
+  const responseData = {
+    modules,
+    previousMarks: marks,
+    predictedMarks
+  };
+
+  // Return the response as JSON
+  res.status(200).json(responseData);
 });
-app.post('/transcripts/process', authenticateUser, ({req, res}: any) => {
+
+app.post('/transcripts/process', (req: any, res: any) => {
 
 });
 
