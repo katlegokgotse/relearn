@@ -9,6 +9,7 @@ import multer from 'multer';
 import pdf from 'pdf-parse';
 import Tesseract from 'tesseract.js';
 import { parseTranscriptText } from "./utils/transcriptToText";
+import { review } from "./utils/review";
 dotenv.config();
 
 const prisma = new PrismaClient;
@@ -143,10 +144,24 @@ app.post('/transcripts/send', upload.single('transcript'), async (req: any, res:
   }
 });
 
+app.post('/transcripts/review', async (req: any, res: any) => {
+  try {
+      const { modules, marks, semestersPassed, numOfSemesters } = req.body;
 
-app.post('/transcripts/review', (req: any, res: any) => {
+      if (!Array.isArray(modules) || !Array.isArray(marks) || modules.length !== marks.length) {
+          return res.status(400).json({ error: "Modules and marks arrays are required and must be the same length." });
+      }
 
+      const feedback = await review(modules, marks, semestersPassed, numOfSemesters);
+
+      res.status(200).json({ feedback });
+  } catch (error) {
+      console.error("Error processing review:", error);
+      res.status(500).json({ error: "An error occurred while processing the review." });
+  }
 });
+
+
 
 app.listen(port, () => {
   console.log(`[server]: Server is running at http://localhost:${port}`);
