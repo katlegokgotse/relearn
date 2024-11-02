@@ -1,0 +1,20 @@
+.dashboard-container {
+  display: flex;
+  height: 100vh; /* Full height */
+}
+
+.sidebar {
+  width: 250px; /* Set a fixed width for the sidebar */
+  background-color: #f0f0f0; /* Light grey background */
+}
+
+.file-upload {
+  flex: 1; /* Take the remaining space */
+  padding: 20px; /* Add some padding */
+}
+
+.Upload {
+  width: 2200px;
+  margin-left: 371px;
+  margin-top: 166px;
+}
