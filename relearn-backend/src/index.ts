@@ -1,168 +1,185 @@
-import express, { Express, Request, Response } from "express";
+import express, { Express, Request, Response, NextFunction } from "express";
 import dotenv from "dotenv";
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import bodyParser from "body-parser";
-import { predictMarks } from "./utils/predict";
 import { PrismaClient } from "@prisma/client";
 import multer from 'multer';
 import pdf from 'pdf-parse';
 import Tesseract from 'tesseract.js';
 import { parseTranscriptText } from "./utils/transcriptToText";
 import { review } from "./utils/review";
+import cors from 'cors';
+import path from "path";
+import axios from "axios";
+
 dotenv.config();
 
-const prisma = new PrismaClient;
+const prisma = new PrismaClient();
 const app: Express = express();
-const port = process.env.PORT;
+const port = process.env.PORT || 3000;
 app.use(bodyParser.json());
+app.use(cors());
 
-//process upload from frontend
-const upload = multer({ storage: multer.memoryStorage() }); 
-/** Middleware */
-const authenticateUser = (req: express.Request, res: express.Response, next: express.NextFunction): void => { 
-  const token = req.cookies?.token;
-  if (!token) {
-    res.status(401).json({ message: "Unauthorized, no token provided" });
-    return;
-  }
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
-  try {
-    const payload = jwt.verify(token, process.env.JSON_WEB_TOKEN as string) as { userId: string};
-    (req as any).userId = payload.userId; //attach userId to req
-    next();
-  } catch(error: any) {
-    if (error instanceof jwt.JsonWebTokenError) {
-       res.status(401).json({ message: "Invalid token" });
-    }
-    res.status(500).json({ message: "Failed to authenticate" });
-  }
+type StudentInfo = {
+    name: string;
+    studentNumber: string;
+    idNumber: string;
+    qualification: string;
+    nqfLevel: number;
+    minimumCredits: number;
+    saqaId: number;
+    conduct: string;
+    languageOfInstruction: string;
+    cumulativeAverage: string;
+    totalCumulativeCredits: number;
 };
 
-app.post('/auth/login', authenticateUser, async(req: any, res: any) =>{
-  const { email, password } = req.body;
+const authenticateUser = (req: Request, res: Response, next: NextFunction): void => {
+    const token = req.cookies?.token;
+    if (!token) {
+        res.status(401).json({ message: "Unauthorized, no token provided" });
+        return;
+    }
+
     try {
-      const user = await prisma.user.findUnique({where: { emailAddress: email  }});
+        const payload = jwt.verify(token, process.env.JSON_WEB_TOKEN as string) as { userId: string };
+        (req as any).userId = payload.userId;
+        next();
+    } catch (error) {
+        res.status(401).json({ message: "Invalid token" });
+    }
+};
 
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      const isPasswordValid = await bcrypt.compare(password, user.password || "");
-      if (!isPasswordValid) {
-        return res.status(401).json({ message: "Invalid credentials" });
-      }
+app.post('/auth/login', async (req: any, res: any) => {
+    const { email, password } = req.body;
+    try {
+        const user = await prisma.user.findUnique({ where: { emailAddress: email } });
 
-      const token = jwt.sign({ userId: user.id}, process.env.JSON_WEB_TOKEN as string, { expiresIn: '1hr'});
-      res.cookie("token", token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          maxAge: 3600000,
-          sameSite: "strict"
-      })
-      res.status(200).json({ message: "Login successful", user, token });
+        if (!user || !(await bcrypt.compare(password, user.password || ""))) {
+            return res.status(401).json({ message: "Invalid credentials" });
+        }
+
+        const token = jwt.sign({ userId: user.id }, process.env.JSON_WEB_TOKEN as string, { expiresIn: '1h' });
+        res.cookie("token", token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            maxAge: 3600000,
+            sameSite: "strict"
+        });
+        res.status(200).json({ message: "Login successful", user, token });
     } catch (error: any) {
-      res.status(500).json({ message: "Login failed", error: error.message || "Server Error" });
+        res.status(500).json({ message: "Login failed", error: error.message || "Server Error" });
     }
 });
 
-app.post('/auth/registration', async(req: any, res: any) => {
-  const {  username, email, password } = req.body;
-  console.log(username)
-  console.log(email)
-  console.log(password)
-  const hashedPassword = await bcrypt.hash(password, 15)
-  try{
-    const user = await prisma.user.create({
-      data: { username, emailAddress: email, password: hashedPassword}, 
-    });
-    res.status(201).json({message: "Registration Successful", user});
-  } catch( error: any){
-    console.error("Error creating user:", error);
-    res.status(500).json({ message: 'Registration failed', error: error.message || "Server Error" });
-  }
+app.post('/auth/registration', async (req: Request, res: Response) => {
+    const { username, email, password } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    try {
+        const user = await prisma.user.create({
+            data: { username, emailAddress: email, password: hashedPassword },
+        });
+        res.status(201).json({ message: "Registration Successful", user });
+    } catch (error: any) {
+        res.status(500).json({ message: "Registration failed", error: error.message || "Server Error" });
+    }
 });
 
+app.post('/transcripts/send', upload.single('file'), async (req: any, res: any) => {
+    if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded.' });
+    }
 
-app.post('/transcripts/send', upload.single('transcript'), async (req: any, res: any) => {
-  try {
-      // Check if a file was uploaded
-      if (!req.file) {
-          return res.status(400).json({ error: "No transcript file provided." });
-      }
-
-      let modules: string[] = [];
-      let marks: number[] = [];
-      let semestersPassed = 0; // Set a default or extract from the text
-      let numOfSemesters = 0;  // Set a default or extract from the text
-
-      // Determine file type and extract text accordingly
-      const fileType = req.file.mimetype;
-
-      if (fileType === 'application/pdf') {
-          // Extract text from PDF
-          const dataBuffer = req.file.buffer;
-          const pdfData = await pdf(dataBuffer);
-          const pdfText = pdfData.text;
-
-          // Parse the PDF text to extract modules and marks
-          ({ modules, marks, semestersPassed, numOfSemesters } = await parseTranscriptText(pdfText));
-
-      } else if (fileType.startsWith('image/')) {
-          // Extract text from image using Tesseract
-          const imageData = req.file.buffer;
-
-          const { data: { text } } = await Tesseract.recognize(imageData, 'eng', {
-              logger: info => console.log(info) // Log progress
-          });
-
-          // Parse the OCR text to extract modules and marks
-          ({ modules, marks, semestersPassed, numOfSemesters } = await parseTranscriptText(text));
-      } else {
-          return res.status(400).json({ error: "Unsupported file type. Please upload a PDF or an image." });
-      }
-
-      // Validate input
-      if (!Array.isArray(modules) || !Array.isArray(marks) || modules.length !== marks.length) {
-          return res.status(400).json({ error: "Modules and marks arrays are required and must be the same length." });
-      }
-
-      // Generate predicted marks
-      const predictedMarks = await predictMarks(modules, marks, semestersPassed, numOfSemesters);
-
-      // Prepare the response data
-      const responseData = {
-          modules,
-          previousMarks: marks,
-          predictedMarks
-      };
-
-      // Return the response as JSON
-      res.status(200).json(responseData);
-  } catch (error) {
-      console.error("Error processing transcript:", error);
-      res.status(500).json({ error: "An error occurred while processing the transcript." });
-  }
+    try {
+        const data = await pdf(req.file.buffer);
+        const text = data.text;
+        const predictedMarks = await predictMarks(text);
+        res.status(200).json({ text, predictedMarks});
+    } catch (error) {
+        res.status(500).json({ error: 'Error reading PDF file.' });
+    }
 });
 
 app.post('/transcripts/review', async (req: any, res: any) => {
-  try {
-      const { modules, marks, semestersPassed, numOfSemesters } = req.body;
-
-      if (!Array.isArray(modules) || !Array.isArray(marks) || modules.length !== marks.length) {
-          return res.status(400).json({ error: "Modules and marks arrays are required and must be the same length." });
-      }
-
-      const feedback = await review(modules, marks, semestersPassed, numOfSemesters);
-
-      res.status(200).json({ feedback });
-  } catch (error) {
-      console.error("Error processing review:", error);
-      res.status(500).json({ error: "An error occurred while processing the review." });
-  }
+    const { modules, marks, semestersPassed, numOfSemesters } = req.body;
+    if (!Array.isArray(modules) || !Array.isArray(marks) || modules.length !== marks.length) {
+        return res.status(400).json({ error: "Modules and marks arrays are required and must be the same length." });
+    }
+    try {
+        const feedback = await review(modules, marks, semestersPassed, numOfSemesters);
+        res.status(200).json({ feedback });
+    } catch (error) {
+        res.status(500).json({ error: "An error occurred while processing the review." });
+    }
 });
-
-
 
 app.listen(port, () => {
-  console.log(`[server]: Server is running at http://localhost:${port}`);
+    console.log(`[server]: Server is running at http://localhost:${port}`);
 });
+
+const predictMarks = async (text: string) => {
+    const prompt = `
+      Given the transcript text: "${text}", extract the modules and marks. 
+      Determine the semesters that have passed by analyzing the text and the number of semesters expected in total.
+      Predict the marks for the remaining modules based on past performance.
+      Just return it in json format. No text just JSON. Give feedback on modules that are below and at the average. Provide suggestions to fix the problem.
+      Respond only in the following JSON format without any additional text:
+      {
+        "predictedMarks": [
+          { "module": "Module Name", "predictedMark": 90 },
+          ...
+        ],  
+        "modulesToFocus": [
+          { "module": "Module Name", "topics": ["Topic1", "Topic2"] }
+        ],
+        "suggestion": {
+          "module": "Module Name",
+          "text": "Focus on improving your understanding of the topics listed."
+        }
+      }
+    `;
+
+    try {
+        const response = await axios.post(
+            'https://api.openai.com/v1/chat/completions',
+            {
+                model: "gpt-4o-mini",
+                messages: [{ role: "user", content: prompt }],
+                max_tokens: 2000 // Adjust token limit based on response length
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        const content = response.data.choices[0].message.content;
+
+        // Attempt to parse the response as JSON
+        let predictedMarks;
+        try {
+            predictedMarks = JSON.parse(content);
+            // Validate the structure of the parsed JSON
+            if (!predictedMarks.predictedMarks || !predictedMarks.modulesToFocus || !predictedMarks.suggestion) {
+                throw new Error("Invalid response structure");
+            }
+        } catch (error) {
+            console.error("Failed to parse predicted marks as JSON:", error);
+            console.log("Raw Response Content:", content); // Log content for debugging
+            return { error: "Failed to parse response as JSON", rawContent: content };
+        }
+
+        console.log(predictedMarks); // Log the parsed JSON object
+        return predictedMarks;
+
+    } catch (error: any) {
+        console.error("Error predicting marks:", error);
+        return { error: "Error predicting marks", details: error.message }; // Standardized error response
+    }
+};

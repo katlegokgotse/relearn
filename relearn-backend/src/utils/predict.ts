@@ -1,6 +1,6 @@
 import axios from "axios";
 
-export async function predictMarks(modules: string[], marks: number[], semestersPassed: number, numOfSemesters: number) {
+export async function prm(modules: string[], marks: number[], semestersPassed: number, numOfSemesters: number) {
     try {
         // Create the prompt for the API, emphasizing the role of semesters passed
         const prompt = `Given the current marks: ${marks.join(", ")} for the modules: ${modules.join(", ")}, predict the next semester's marks. 
