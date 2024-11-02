@@ -5,6 +5,10 @@ import jwt from 'jsonwebtoken';
 import bodyParser from "body-parser";
 import { predictMarks } from "./utils/predict";
 import { PrismaClient } from "@prisma/client";
+import multer from 'multer';
+import pdf from 'pdf-parse';
+import Tesseract from 'tesseract.js';
+import { parseTranscriptText } from "./utils/transcriptToText";
 dotenv.config();
 
 const prisma = new PrismaClient;
@@ -12,6 +16,8 @@ const app: Express = express();
 const port = process.env.PORT;
 app.use(bodyParser.json());
 
+//process upload from frontend
+const upload = multer({ storage: multer.memoryStorage() }); 
 /** Middleware */
 const authenticateUser = (req: express.Request, res: express.Response, next: express.NextFunction): void => { 
   const token = req.cookies?.token;
@@ -75,25 +81,66 @@ app.post('/auth/registration', async(req: any, res: any) => {
   }
 });
 
-app.post('/transcripts/send', async (req: any, res: any) => {
-  const { modules, marks, semestersPassed, numOfSemesters } = req.body;
-  // Validate input
-  if (!Array.isArray(modules) || !Array.isArray(marks) || modules.length !== marks.length) {
-    return res.status(400).json({ error: "Modules and marks arrays are required and must be the same length." });
+
+app.post('/transcripts/send', upload.single('transcript'), async (req: any, res: any) => {
+  try {
+      // Check if a file was uploaded
+      if (!req.file) {
+          return res.status(400).json({ error: "No transcript file provided." });
+      }
+
+      let modules: string[] = [];
+      let marks: number[] = [];
+      let semestersPassed = 0; // Set a default or extract from the text
+      let numOfSemesters = 0;  // Set a default or extract from the text
+
+      // Determine file type and extract text accordingly
+      const fileType = req.file.mimetype;
+
+      if (fileType === 'application/pdf') {
+          // Extract text from PDF
+          const dataBuffer = req.file.buffer;
+          const pdfData = await pdf(dataBuffer);
+          const pdfText = pdfData.text;
+
+          // Parse the PDF text to extract modules and marks
+          ({ modules, marks, semestersPassed, numOfSemesters } = await parseTranscriptText(pdfText));
+
+      } else if (fileType.startsWith('image/')) {
+          // Extract text from image using Tesseract
+          const imageData = req.file.buffer;
+
+          const { data: { text } } = await Tesseract.recognize(imageData, 'eng', {
+              logger: info => console.log(info) // Log progress
+          });
+
+          // Parse the OCR text to extract modules and marks
+          ({ modules, marks, semestersPassed, numOfSemesters } = await parseTranscriptText(text));
+      } else {
+          return res.status(400).json({ error: "Unsupported file type. Please upload a PDF or an image." });
+      }
+
+      // Validate input
+      if (!Array.isArray(modules) || !Array.isArray(marks) || modules.length !== marks.length) {
+          return res.status(400).json({ error: "Modules and marks arrays are required and must be the same length." });
+      }
+
+      // Generate predicted marks
+      const predictedMarks = await predictMarks(modules, marks, semestersPassed, numOfSemesters);
+
+      // Prepare the response data
+      const responseData = {
+          modules,
+          previousMarks: marks,
+          predictedMarks
+      };
+
+      // Return the response as JSON
+      res.status(200).json(responseData);
+  } catch (error) {
+      console.error("Error processing transcript:", error);
+      res.status(500).json({ error: "An error occurred while processing the transcript." });
   }
-
-  // Generate predicted marks (e.g., increase for illustration purposes)
-  const predictedMarks = await predictMarks(modules, marks, semestersPassed, numOfSemesters);
-
-  // Prepare the response data
-  const responseData = {
-    modules,
-    previousMarks: marks,
-    predictedMarks
-  };
-
-  // Return the response as JSON
-  res.status(200).json(responseData);
 });
 
 app.post('/transcripts/process', (req: any, res: any) => {
