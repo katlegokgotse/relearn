@@ -1,7 +1,7 @@
 // components/Chart.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Line } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -25,65 +25,34 @@ ChartJS.register(
 );
 
 interface ChartProps {
-  endpoint: string;
+  data: any;
 }
 
-const Chart: React.FC<ChartProps> = ({ endpoint }) => {
-  const [chartData, setChartData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await fetch(endpoint);
-        if (!response.ok) {
-          throw new Error("Network response was not ok");
-        }
-        const data = await response.json();
-        setChartData(data);
-      } catch (error) {
-        setError("Error fetching data");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [endpoint]);
-
-  if (loading) {
-    return <div>Loading...</div>;
-  }
-
-  if (error) {
-    return <div>Error: {error}</div>;
-  }
-
-  // Assuming the data structure is known; adjust accordingly
-  const labels = chartData.map((item: any) => item.label); // Change 'label' to your actual data's label field
-  const values = chartData.map((item: any) => item.value); // Change 'value' to your actual data's value field
-
-  const data = {
-    labels,
+const ChartDisplay: React.FC<ChartProps> = ({ data }) => {
+  // Dummy data for the chart
+  const dummyData = {
+    labels: ["January", "February", "March", "April", "May", "June", "July"],
     datasets: [
       {
-        label: "My Dataset",
-        data: values,
-        borderColor: "rgba(75, 192, 192, 1)",
-        backgroundColor: "rgba(75, 192, 192, 0.2)",
-        borderWidth: 1,
+        label: "Sample Data",
+        data: [65, 59, 80, 81, 56, 55, 40], // Dummy values for each month
+        borderColor: 'rgba(75, 192, 192, 1)', // Color of the line
+        backgroundColor: 'rgba(75, 192, 192, 0.2)', // Background color of the area
         fill: true,
+        borderWidth: 1,
       },
     ],
   };
 
+  // Use dummyData if no valid data is provided
+  const chartData = data && data.datasets.length > 0 ? data : dummyData;
+
   return (
     <div>
       <h2>My Chart</h2>
-      <Line data={data} />
+      <Line data={chartData} />
     </div>
   );
 };
 
-export default Chart;
+export default ChartDisplay;

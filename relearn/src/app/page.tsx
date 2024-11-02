@@ -5,7 +5,7 @@ import Dashboard from "@/pages/Dashboard";
 export default function Home() {
   return (
     <>
-      <ChartComponent endpoint="https://example.com/api/data" />
+      <Dashboard />
     </>
   );
 }
