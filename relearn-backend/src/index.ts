@@ -106,8 +106,6 @@ app.post('/transcripts/send', authenticateUser, async (req: any, res: any) => {
     barmode: 'group'
   }
   const imgOpts = { format: 'png', width: 800, height: 400 };
-  const graphOptions = { layout, data, config: imgOpts };
-
  Plot.newPlot('chart', data, layout, imgOpts).then((image: any)=> {
   res.set('Content-Type', 'image/png');
   res.send(image)
