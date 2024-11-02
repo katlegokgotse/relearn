@@ -1,11 +1,9 @@
-import Authentication from "@/components/auth/Authentication";
-import ChartComponent from "@/components/dashboard/ChartComponent";
-import Dashboard from "@/pages/Dashboard";
+import AuthenticationPage from "@/pages/AuthenticationPage"; // Make sure this path is correct
 
 export default function Home() {
   return (
     <>
-      <ChartComponent endpoint="https://example.com/api/data" />
+      <AuthenticationPage />
     </>
   );
 }

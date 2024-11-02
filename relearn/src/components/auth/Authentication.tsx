@@ -1,6 +1,11 @@
 "use client";
-
 import { useState } from "react";
+import { auth } from "../../../firebase";
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+} from "firebase/auth";
+import { useRouter } from "next/navigation";
 
 const Authentication = () => {
   const [isSignIn, setIsSignIn] = useState(true);
@@ -10,52 +15,59 @@ const Authentication = () => {
     password: "",
     confirmPassword: "",
   });
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const router = useRouter();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.id]: e.target.value });
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setError("");
-    setSuccess("");
+    setError(null);
+    setSuccess(null);
 
-    const endpoint = isSignIn ? "/auth/login" : "/auth/registration";
-    const payload = isSignIn
-      ? { email: formData.email, password: formData.password }
-      : {
-          username: formData.username,
-          email: formData.email,
-          password: formData.password,
-        };
+    const { email, password } = formData;
 
     try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      await signInWithEmailAndPassword(auth, email, password);
+      setSuccess("Login successful!");
 
-      if (!response.ok) {
-        const errorMessage =
-          response.status === 404
-            ? "Endpoint not found"
-            : "An unexpected error occurred";
-        throw new Error(errorMessage);
-      }
-
-      // Check if the response is JSON before parsing
-      const contentType = response.headers.get("Content-Type");
-      if (contentType && contentType.includes("application/json")) {
-        const data = await response.json();
-        setSuccess(data.message || "Success!");
-      } else {
-        throw new Error("Invalid response format");
-      }
+      // Delay routing slightly to ensure state updates
+      setTimeout(() => router.push("/Dashboard"), 100);
     } catch (error: any) {
-      setError(error.message || "An error occurred during submission");
+      console.error("Login error:", error);
+      setError(error.message || "An error occurred during login.");
+    }
+  };
+
+  const handleRegistrationSubmit = async (
+    e: React.FormEvent<HTMLFormElement>
+  ) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    const { username, email, password } = formData;
+
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+      setSuccess("Registration successful!");
+      setFormData({
+        username: "",
+        email: "",
+        password: "",
+        confirmPassword: "",
+      });
+    } catch (error: any) {
+      console.error("Registration error:", error);
+      setError(error.message || "An error occurred during registration.");
     }
   };
 
@@ -71,21 +83,17 @@ const Authentication = () => {
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
           >
-            {/* SVG content */}
+            {/* SVG content can be placed here */}
           </svg>
         </div>
-        <h1 className="text-2xl font-semibold mb-4">Explore the app</h1>
-        <p className="text-center">
-          Have your finances in one place and always under control
-        </p>
+        <h1 className="text-2xl font-semibold mb-4">Explore</h1>
+        <p className="text-center">Helping you track your progress</p>
       </div>
 
       {/* Right Side */}
       <div className="w-1/2 bg-white flex flex-col justify-center items-center p-8">
         <div className="w-full max-w-sm">
-          <h1 className="text-2xl font-semibold mb-8 text-center">
-            App's name
-          </h1>
+          <h1 className="text-2xl font-semibold mb-8 text-center">Relearn</h1>
           <div className="flex mb-4">
             <button
               onClick={() => setIsSignIn(true)}
@@ -106,7 +114,9 @@ const Authentication = () => {
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit}>
+          <form
+            onSubmit={isSignIn ? handleLoginSubmit : handleRegistrationSubmit}
+          >
             {!isSignIn && (
               <div className="mb-4">
                 <label
@@ -178,11 +188,11 @@ const Authentication = () => {
             )}
 
             <div className="mb-4 text-right">
-              {isSignIn ? (
+              {isSignIn && (
                 <a href="#" className="text-sm text-gray-600">
                   Forgot password?
                 </a>
-              ) : null}
+              )}
             </div>
 
             <button
