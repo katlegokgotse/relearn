@@ -13,7 +13,7 @@ export async function predictMarks(modules: string[], marks: number[], semesters
             {
                 model: "gpt-4o-mini",
                 messages: [{ role: "user", content: prompt }],
-                max_tokens: 150 // Increased token limit for a more detailed response
+                max_tokens: 1024 // Increased token limit for a more detailed response
             },
             {
                 headers: {
@@ -46,22 +46,19 @@ export async function predictMarks(modules: string[], marks: number[], semesters
 
                     // If the module already exists in the map, store the predicted mark
                     if (!predictedMarksMap.has(moduleName)) {
-                        predictedMarksMap.set(moduleName, []);
+                        predictedMarksMap.set(moduleName, []); // Initialize if it doesn't exist
                     }
                     predictedMarksMap.get(moduleName).push(predictedMark);
                 }
             });
 
-            // Create the final result array
-            const predictedMarksArray = modules.map((module) => {
-                const predictions = predictedMarksMap.get(module) || [null];
-                return {
-                    module,
-                    predictedMark: predictions.length > 0 ? predictions[predictions.length - 1] : null // Get the latest prediction or null
-                };
-            });
+            // Create the final JSON result
+            const predictedMarksJSON = Array.from(predictedMarksMap.entries()).map(([module, predictions]) => ({
+                module,
+                predictedMark: predictions.length > 0 ? predictions[predictions.length - 1] : null // Get the latest prediction or null
+            }));
 
-            return predictedMarksArray;
+            return predictedMarksJSON;
 
         } else {
             throw new Error("No predictions returned from the AI.");

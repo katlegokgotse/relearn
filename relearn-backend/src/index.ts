@@ -77,7 +77,6 @@ app.post('/auth/registration', async(req: any, res: any) => {
 
 app.post('/transcripts/send', async (req: any, res: any) => {
   const { modules, marks, semestersPassed, numOfSemesters } = req.body;
-  
   // Validate input
   if (!Array.isArray(modules) || !Array.isArray(marks) || modules.length !== marks.length) {
     return res.status(400).json({ error: "Modules and marks arrays are required and must be the same length." });
