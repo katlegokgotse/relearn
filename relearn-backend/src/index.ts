@@ -143,7 +143,8 @@ app.post('/transcripts/send', upload.single('transcript'), async (req: any, res:
   }
 });
 
-app.post('/transcripts/process', (req: any, res: any) => {
+
+app.post('/transcripts/review', (req: any, res: any) => {
 
 });
 
