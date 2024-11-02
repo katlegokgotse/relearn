@@ -5,7 +5,7 @@ import { PrismaClient } from "@prisma/client";
 import jwt from 'jsonwebtoken'
 import bodyParser from "body-parser";
 import { predictMarks } from "./utils/predict";
-
+import Plot from 'plotly.js';
 dotenv.config();
 
 const prisma = new PrismaClient();
@@ -88,18 +88,32 @@ app.post('/transcripts/send', authenticateUser, async (req: any, res: any) => {
       x: modules,
       y: marks,
       type: 'bar',
-      
-    }
-  ]
-
-  // Render the chart and send as response
-  try {
-      const imageBuffer = await chartJSNodeCanvas.renderToBuffer(configuration, 'image/png');
-      res.set('Content-Type', 'image/png');
-      res.send(imageBuffer);
-  } catch (error) {
-      res.status(500).json({ error: "Failed to generate transcript chart." });
+      name: 'Previous Marks',
+      marker: { color: `rgba(54, 162, 235, 0.7)`}
+    },
+    {
+      x: modules,
+      y: marks,
+      type: 'bar',
+      name: 'Predicted Marks',
+      marker: { color: `rgba(255, 99, 132, 0.7)`}
+    },
+  ];
+  const layout  = {
+    title: 'Transcript Analysis with Predicted Marks',
+    xaxis: {title: 'Modules'},
+    yaxis: {title: 'Marks', range: [0, 100]},
+    barmode: 'group'
   }
+  const imgOpts = { format: 'png', width: 800, height: 400 };
+  const graphOptions = { layout, data, config: imgOpts };
+
+ Plot.newPlot('chart', data, layout, imgOpts).then((image: any)=> {
+  res.set('Content-Type', 'image/png');
+  res.send(image)
+ }).catch ((error: any) => {
+      res.status(500).json({ error: "Failed to generate transcript chart." });
+  })
 });
 app.post('/transcripts/process', authenticateUser, ({req, res}: any) => {
 
